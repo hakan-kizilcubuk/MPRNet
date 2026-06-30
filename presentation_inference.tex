@@ -1,0 +1,295 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Custom Premium Color Theme (Deep Space Charcoal & Vibrant Teal)
+\definecolor{primaryDark}{HTML}{1A1D20}
+\definecolor{accentTeal}{HTML}{00A896}
+\definecolor{secondarySlate}{HTML}{4A4E69}
+\definecolor{lightBg}{HTML}{F8F9FA}
+\definecolor{darkText}{HTML}{2B2D42}
+
+% Set Beamer Colors
+\setbeamercolor{palette primary}{bg=primaryDark, fg=white}
+\setbeamercolor{palette secondary}{bg=secondarySlate, fg=white}
+\setbeamercolor{palette tertiary}{bg=accentTeal, fg=white}
+\setbeamercolor{structure}{fg=accentTeal}
+\setbeamercolor{background canvas}{bg=lightBg}
+\setbeamercolor{normal text}{fg=darkText}
+
+% Title Slide & Header Style
+\setbeamercolor{title}{bg=primaryDark, fg=white}
+\setbeamercolor{frametitle}{bg=primaryDark, fg=white}
+\setbeamercolor{block title}{bg=accentTeal, fg=white}
+\setbeamercolor{block body}{bg=white, fg=darkText}
+
+% Flat Custom Styling Templates
+\setbeamertemplate{navigation symbols}{} % Remove default controls
+\setbeamertemplate{frametitle}[default][center]
+\setbeamertemplate{footline}[frame number]
+
+% --- Presentation Details ---
+\title[MPRNet Inference Reproduction]{\textbf{Multi-Stage Progressive Image Restoration (MPRNet)}}
+\subtitle{Inference Pipeline Reproduction, Evaluation, and Verification}
+\author[A. Hakan]{Ahmet Hakan Kızılçubuk}
+\institute{Artificial Intelligence and Cybersecurity}
+\date{June 2026}
+
+\begin{document}
+
+% Slide 1: Title Page
+\begin{frame}[plain]
+    \titlepage
+\end{frame}
+
+% Slide 2: Background - Beyond a Gaussian Denoiser
+\begin{frame}{Background: Beyond a Gaussian Denoiser}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{Limits of Traditional Denoising (e.g., DnCNN):}
+            \begin{itemize}
+                \item Focuses strictly on pixel-level Gaussian noise structures.
+                \item Struggle to restore images containing complex spatial degradation, such as motion blur or heavy rain streaks.
+                \item Suffer from spatial detail loss when deeper networks over-smooth fine textures.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Restoration Balance Problem}
+                Image restoration demands a careful balance between:
+                \begin{enumerate}
+                    \item \textbf{Spatial details}: Sharp textures, edges, and fine structures.
+                    \item \textbf{Contextual information}: High-level structural semantics (e.g., recognizing object boundaries to guide restoration).
+                \end{enumerate}
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 3: MPRNet Solution & Core Framework
+\begin{frame}{Proposed Solution: MPRNet Framework}
+    \begin{columns}
+        \begin{column}{0.52\textwidth}
+            \textbf{Multi-Stage Progressive Architecture:}
+            \begin{itemize}
+                \item \textbf{Breakdown of Recovery:} Simplifies the restoration function into more manageable sub-tasks.
+                \item \textbf{Stage 1 \& 2 (Context-Gathering):} Utilize Encoder-Decoder (U-Net) blocks to gather multi-scale contextual features from localized image patches.
+                \item \textbf{Stage 3 (Original Resolution):} Operates on the full input image resolution to retain high-frequency spatial details and ensure clean edge reconstructions.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \begin{block}{Inter-Stage Information Exchange}
+                Instead of simple feed-forward cascading, MPRNet implements complex lateral and sequential feature exchanges to preserve raw data representation throughout progressive stages.
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 4: Key Modules - SAM and CSFF
+\begin{frame}{Core Modules: SAM \& CSFF}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Supervised Attention Module (SAM)}
+                \small
+                \begin{itemize}
+                    \item Placed between sequential progressive stages.
+                    \item Incorporates ground-truth supervisions at intermediate outputs.
+                    \item Leverages a per-pixel attention mechanism to mask and re-weight local features, emphasizing degraded pixels while suppressing clean ones.
+                \end{itemize}
+            \end{block}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Cross-Stage Feature Fusion (CSFF)}
+                \small
+                \begin{itemize}
+                    \item Connects processing blocks of Stage 1/2 encoders and decoders to subsequent stages.
+                    \item Integrates lateral skip connections.
+                    \item Prevents vanishing gradient problems and guards against structural information loss across downsampling steps.
+                \end{itemize}
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 5: Inference Pipeline Design
+\begin{frame}{Custom Inference Engine Design}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{Script Features (\texttt{inference.py}):}
+            \begin{itemize}
+                \item \textbf{Multi-Task Support:} Unified entry point for Denoising, Deblurring, and Deraining.
+                \item \textbf{Automatic Device Routing:} Automatically detects CUDA GPUs. Places tensors and maps model checkpoints safely on CPU if GPU is unavailable.
+                \item \textbf{State Dict Parsing:} Resolves PyTorch \texttt{DataParallel} wrapper prefixes (\texttt{module.}) to ensure weight compatibility regardless of training setup.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Self-Contained Implementation}
+                \small
+                The inference engine acts independently of sub-folder packaging:
+                \begin{itemize}
+                    \item Dynamically compiles and instantiates model architectures using Python's \texttt{run\_path}.
+                    \item Formulates robust custom image loaders and metrics savers to run seamlessly on arbitrary directories.
+                \end{itemize}
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 6: Mathematical Boundary Handling (FIXED: Added [fragile])
+\begin{frame}[fragile]{Mathematical Boundary Handling: Reflection Padding}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{The Dimension Contraction Problem:}
+            \begin{itemize}
+                \item MPRNet divides patches progressively at multiple levels, requiring image dimensions to be multiples of 8.
+                \item Arbitrary sizes cause division errors or channel spatial shape mismatches at feature fusion steps.
+            \end{itemize}
+            \vspace{0.2cm}
+            \textbf{Our Solution:}
+            \begin{itemize}
+                \item Compute pad values dynamically:
+                $$\text{pad}_h = (8 - h \bmod 8) \bmod 8$$
+                $$\text{pad}_w = (8 - w \bmod 8) \bmod 8$$
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Reflection Padding Implementation}
+                \small
+                \begin{itemize}
+                    \item Applies \texttt{reflect} padding to inputs prior to inference:
+                    \begin{lstlisting}[language=python, basicstyle=\tiny\ttfamily]
+input_tensor = F.pad(input_tensor, (0, padw, 0, padh), "reflect")
+                    \end{lstlisting}
+                    \item Retains structural edge continuity (prevents black borders).
+                    \item Crops output tensor back to original shape:
+                    \begin{lstlisting}[language=python, basicstyle=\tiny\ttfamily]
+restored_tensor = restored_tensor[:, :, :h, :w]
+                    \end{lstlisting}
+                \end{itemize}
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 7: Quantitative Benchmarks & Verification
+\begin{frame}{Quantitative Benchmarks \& Verification}
+    \begin{columns}
+        \begin{column}{0.45\textwidth}
+            \textbf{Evaluation Metrics:}
+            \begin{itemize}
+                \item Custom evaluation computes \textbf{PSNR} and \textbf{SSIM} using \texttt{scikit-image}.
+                \item Verified using the local \textbf{Set12} dataset corrupted with synthetic AWGN ($\sigma=25$).
+                \item Successfully processes unique files and computes comparative metrics.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.55\textwidth}
+            \begin{table}
+                \centering
+                \small
+                \begin{tabular}{lcc}
+                    \toprule
+                    \textbf{Restoration Task} & \textbf{Evaluation Dataset} & \textbf{Target PSNR (dB)} \\
+                    \midrule
+                    \textbf{Deblurring} & GoPro (Test Set) & $\sim$32.63 dB \\
+                    \textbf{Deraining}  & Rain100L         & $\sim$36.40 dB \\
+                    \textbf{Denoising}  & SIDD (Srgb Blocks) & $\sim$39.71 dB \\
+                    \midrule
+                    \textbf{Verification Denoising} & Set12 ($\sigma=25$, Random) & 11.29 dB \\
+                    \bottomrule
+                \end{tabular}
+                \caption{Expected performance benchmarks vs verification dry run.}
+            \end{table}
+            \centering
+            \tiny{*Note: The verification run utilizes random weights. Loading the pretrained model weights yields full restoration benchmarks.}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 8: CLI User Guide & Practical Execution
+\begin{frame}[fragile]{CLI User Guide \& Practical Execution}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{Executing MPRNet Inference:}
+            \scriptsize
+            \begin{block}{Run Denoising Task}
+\begin{lstlisting}[language=bash, basicstyle=\tiny\ttfamily, keywordstyle=\color{accentTeal}]
+.venv/Scripts/python.exe inference.py \
+  --task Denoising \
+  --input_dir "data/Set12" \
+  --result_dir "./results_mprnet_denoised"
+\end{lstlisting}
+            \end{block}
+            \begin{block}{Run Deblurring Task}
+\begin{lstlisting}[language=bash, basicstyle=\tiny\ttfamily, keywordstyle=\color{accentTeal}]
+.venv/Scripts/python.exe inference.py \
+  --task Deblurring \
+  --input_dir "data/Set12" \
+  --result_dir "./results_mprnet_deblurred"
+\end{lstlisting}
+            \end{block}
+            \begin{block}{Run Deraining Task}
+\begin{lstlisting}[language=bash, basicstyle=\tiny\ttfamily, keywordstyle=\color{accentTeal}]
+.venv/Scripts/python.exe inference.py \
+  --task Deraining \
+  --input_dir "data/Set12" \
+  --result_dir "./results_mprnet_derained"
+\end{lstlisting}
+            \end{block}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \textbf{Custom Parameter Adjustments:}
+            \small
+            \begin{itemize}
+                \item \texttt{--weights}: Override with custom \texttt{.pth} path.
+                \item \texttt{--target\_dir}: Location of ground truth for computing PSNR/SSIM.
+                \item \texttt{--device}: Select \texttt{cuda} or \texttt{cpu}
+                \item \texttt{--noise\_level}: Add synthetic noise of level $\sigma$.
+            \end{itemize}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 9: Qualitative Visualization & Conclusions
+\begin{frame}{Qualitative Visualization \& Conclusions}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{Visualization Engine:}
+            \begin{itemize}
+                \item Specifying \texttt{--save\_comparison true} exports side-by-side comparison images.
+                \item Displays:
+                $$\text{Input (Degraded)} \quad \Big| \quad \text{MPRNet Output} \quad \Big| \quad \text{Ground Truth}$$
+                \item Saved under \texttt{results/comparisons/} for immediate presentation use.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Inference Pipeline Summary}
+                \small
+                We successfully implemented, verified, and packaged the inference pipeline for MPRNet:
+                \begin{itemize}
+                    \item Compiled the network structure.
+                    \item Resolved weight mapping configurations across environments.
+                    \item Implemented math-correct reflection padding.
+                    \item Calculated performance metrics successfully.
+                \end{itemize}
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 9: Conclusion
+\begin{frame}[plain]
+    \begin{center}
+        \Huge \textcolor{accentTeal}{\textbf{Thank You}}
+        
+        \vspace{0.6cm}
+        \large Ahmet Hakan Kızılçubuk
+        
+        \vspace{0.2cm}
+        \small Q \& A Session
+    \end{center}
+\end{frame}
+
+\end{document}
